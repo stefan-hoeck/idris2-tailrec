@@ -1,9 +1,9 @@
-# idris2-tailrec : Total, Stack-safe, Monadic Recursion in Idris2
+# idris2-tailrec : Total stack-safe monadic Recursion in Idris2
 
 Writing recursive functions that do not overflow the stack
 can be challenging. The Javascript backends in Idris2
 optimize mutually tail-recursive
-functions into a while loop, which uses constant stack space.
+functions into while loops, which uses constant stack space.
 The Chez backend performs tail-call optimization on its own.
 In monadic code, however, the recursive call happens within
 the bind operator `(>>=)`, and is therefore not
@@ -34,8 +34,8 @@ directly to their monad interface
 (see the [cats](https://github.com/typelevel/cats) library).
 The solution is very similar in both cases. In the code
 below, we look at how *purescript-tailrec* does it
-(they use a dedicated `Step` type instead of `Either` for
-this but the result is the same):
+(they use a dedicated `Step` type instead of `Either`
+but the result is the same):
 
 ```idris
 interface Monad m => MonadRec1 m where
@@ -65,7 +65,7 @@ MonadRec1 Maybe where
 
 This will not be accepted by the totality checker
 and for good reasons. The following program will loop
-forver:
+forever:
 
 ```idris
 forever : Maybe Nat
@@ -74,13 +74,13 @@ forever = tailRecM1 go ()
         go () = Just $ Left ()
 ```
 
-What we are lacking is a way to convice Idris, that the
+What we are lacking is a way to convince Idris, that the
 values of type `a` are getting smaller in every recursive
 step, and that's the core contribution of this library:
 We enhance `tailRecM1` with such a proof, thus rendering
 implementations provably total. While this will lead
 to slightly more complex types and some manual proof
-passing, the result is well worth it: We get total,
+passing, the result is well worth it: We get total
 stack-safe monadic recursion!
 
 ## Well-founded Relations
@@ -90,7 +90,7 @@ a dependent type:
 
 ```idris
 ||| Step function with a proof that in case of a continuation
-||| returning `v2`, `rel v2 v` holds. We can use this as a proof
+||| returning `v2`, `rel v2 v` holds. We can use this as part of a proof
 ||| that the seed for the next iterations is getting strictly smaller.
 data Step : (st, res : Type) -> (rel : a -> a -> Type) -> (v : a) -> Type where
   Cont : (v2 : a) -> (state : st) -> (0 prf : rel v2 v) -> Step st res rel v
@@ -139,7 +139,7 @@ There is one piece still missing: A proof that our `seed` values
 will eventually come to an end, and hence, function `step` *must*
 eventually return a `Done`. This doesn't work, when `Equal`
 is our relation, as the seed can stay forever the same.
-What we are looking for, are
+What we are looking for are
 [*well-founded* relations](https://en.wikipedia.org/wiki/Well-founded_relation).
 There are several definitions for this, but for us, the most important
 one is the following: Assume `<` is a relation over type `A`.
@@ -193,8 +193,10 @@ natAcc n = Access (acc n)
         acc Z _ _ impossible
 ```
 
-What we can see is, that the base case is `impossible`: There is no
-natural number strictly smaller than zero.
+As you can see, the base case is `impossible`: There is no
+natural number strictly smaller than zero. This will always
+be the case if we come up with a value of type `Accessible`, the
+creation of which satisfies the totality checker.
 In the recursive case, we have `v < u`, hence `S v <= u`, hence `S v <= S u'`
 hence `v <= u'`, which is the type of `vLTEu'`.
 But if we now get a `w` with
