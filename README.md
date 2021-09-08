@@ -3,8 +3,9 @@
 Writing recursive functions that do not overflow the stack
 can be challenging. The Javascript backends in Idris2
 optimize mutually tail-recursive
-functions into while loops, which uses constant stack space.
-The Chez backend performs tail-call optimization on its own.
+functions into while loops, which makes them use constant stack space.
+Chez scheme, the target of the default backend
+performs tail-call optimization on its own.
 In monadic code, however, the recursive call happens within
 the bind operator `(>>=)`, and is therefore not
 in tail position. The following program, for instance,
@@ -50,7 +51,7 @@ count2 = tailRecM1 go
 
 Implementers of `MonadRec1` must make sure to write `tailRecM`
 in a tail recursive manner. If they do so, `count2` will use constant
-stack size. Problem solved.
+stack space. Problem solved.
 
 Well, in PureScript and Scala, yes, but not so in Idris.
 Let's implement `MonadRec1` for `Maybe`:
