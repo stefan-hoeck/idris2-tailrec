@@ -1,14 +1,16 @@
-# idris2-tailrec : Provably total, stack-safe monadic recursion in Idris2
+# idris2-tailrec : Total, Stack-safe, Monadic Recursion in Idris2
 
 Writing recursive functions that do not overflow the stack
-can be challenging. Idris2 optimizes mutually tail-recursive
+can be challenging. The Javascript backends in Idris2
+optimize mutually tail-recursive
 functions into a while loop, which uses constant stack space.
 The Chez backend performs tail-call optimization on its own.
-In monadic code, however, the final call is typically not
+In monadic code, however, the recursive call happens within
+the bind operator `(>>=)`, and is therefore not
 in tail position. The following program, for instance,
-will overflow the stack on the node backend (the module
-imports will be needed later on; this README is a literate
-Idris2 file):
+will overflow the stack on the Node backend (this README
+is a literate Idris2 file, and the module imports will be
+needed later on):
 
 ```idris
 import Control.WellFounded
@@ -46,11 +48,11 @@ count2 = tailRecM1 go
         go (S k) = putStrLn #"Next is \#{show k}"# $> Left k
 ```
 
-Implementors of `MonadRec1` must make sure to implement `tailRecM`
+Implementers of `MonadRec1` must make sure to write `tailRecM`
 in a tail recursive manner. If they do so, `count2` will use constant
 stack size. Problem solved.
 
-Well, in PureScript and Scala, yes, but not in Idris.
+Well, in PureScript and Scala, yes, but not so in Idris.
 Let's implement `MonadRec1` for `Maybe`:
 
 ```idris
@@ -79,7 +81,7 @@ We enhance `tailRecM1` with such a proof, thus rendering
 implementations provably total. While this will lead
 to slightly more complex types and some manual proof
 passing, the result is well worth it: We get total,
-stack safe monadic recursion!
+stack-safe monadic recursion!
 
 ## Well-founded Relations
 
@@ -135,7 +137,7 @@ forever2 = tailRecM2 go () ()
 
 There is one piece still missing: A proof that our `seed` values
 will eventually come to an end, and hence, function `step` *must*
-eventually end with a `Done`. This doesn't work, when `Equal`
+eventually return a `Done`. This doesn't work, when `Equal`
 is our relation, as the seed can stay forever the same.
 What we are looking for, are
 [*well-founded* relations](https://en.wikipedia.org/wiki/Well-founded_relation).
@@ -152,9 +154,10 @@ There is module `Control.WellFounded`, providing us with the
 ingredients for this. We will now do two things: First, we
 use a proof of accessibility to write a total implementation
 of `tailRecM` that is accepted by Idris, second, we construct
-some values of type `Accessible` manually to get feel for
-its working. Note: These proofs will be erased at runtime,
-so we need not care, whether they are constrcted in a tail recursive
+some values of type `Accessible` manually to get a feel for
+how this works. Note: Our proofs of accessibility
+will be erased at runtime,
+so we need not care if they are constructed in a tail recursive
 manner or not.
 
 ```idris
@@ -174,7 +177,7 @@ MonadRec Maybe where
 ```
 
 That was not too hard. The only constructor of `Accessible rel v1` provides
-a function returning a new `Accessible rel v2` for all values,
+a function returning a new `Accessible rel v2` for all values `v2`,
 for which `rel v2 v1` holds.
 
 But can we be sure about this? Let's come up with some values
@@ -192,11 +195,13 @@ natAcc n = Access (acc n)
 
 What we can see is, that the base case is `impossible`: There is no
 natural number strictly smaller than zero.
-In the recursive case, we have `v < u`, hence `v < S u`, hence `S v <= S u'`,
-hence `v <= u'`, the type of `vLTEu'`. But if we now get a `w` with
+In the recursive case, we have `v < u`, hence `S v <= u`, hence `S v <= S u'`
+hence `v <= u'`, which is the type of `vLTEu'`.
+But if we now get a `w` with
 `w < v`, and therefore `S w <= v`, then `S w <= u'` by the law of
-transitivity, and we can recursively invoke `acc` with a strictly smaller
-`u'`. Idris is totally happy with this. Not so, with the following:
+transitivity, and we can recursively invoke `acc` with `u'`, a value strictly
+smaller than `u`.
+Idris is totally happy with this. Not so, with the following:
 
 ```idris
 strAcc : (s : String) -> Accessible Equal s
@@ -215,11 +220,11 @@ at us.
 When I was experimenting with this for the first time, 
 I found that during recursion we often need some form of
 accumulator, and, contrary to the data structure or
-value, over which we iterate, the accumulator typicaller
+value, over which we iterate, the accumulator typically
 gets larger instead of smaller. We could of course just
-pair the accumulator with the seed value and project
+pair the accumulator with the seed value and use
 the well-founded relation on the first (or second) value
-of the resulting pair. Will this works perfectly fine, I
+of the resulting pair. While this works perfectly fine, I
 felt it to be rather more cumbersome than necessary, so
 I added an additional state argument to `Cont` and
 `tailRecM`, which we can use as an internal accumulator.
