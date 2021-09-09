@@ -126,6 +126,14 @@ MonadRec2 Maybe where
     Just (Cont s2 st2 _) => tailRecM2 f s2 st2
 ```
 
+The interesting part is the `step` function we pass to `tailRecM2`.
+Its type can be interpreted as follows: For every value `seed`, I tell
+you what to do in the next recursive step, and in case we are not yet done,
+I'll give you a new seed (let's call it `seed2` here),
+so that `rel seed2 seed` holds. For
+instance, if `rel` is `LT` for natural numbers, `seed2` will be a new
+natural number strictly smaller than `seed`.
+
 However, this will (of course) still not convince the
 totality checker and rightfully so:
 
