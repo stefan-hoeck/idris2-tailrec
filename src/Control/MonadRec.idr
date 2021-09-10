@@ -15,10 +15,10 @@ import Data.Nat
 %default total
 
 --------------------------------------------------------------------------------
---          MonadRec
+--          Step
 --------------------------------------------------------------------------------
 
-||| Single step in a recursive computation. 
+||| Single step in a recursive computation.
 |||
 ||| A `Step` is either `Done`, in which case we return the
 ||| final result, or `Cont`, in which case we continue
@@ -28,10 +28,11 @@ import Data.Nat
 ||| If `rel` is well-founded, the recursion will provably
 ||| come to an end in a finite number of steps.
 public export
-data Step :  (accum : Type)
+data Step :  (rel   : a -> a -> Type)
+          -> (seed  : a)
+          -> (accum : Type)
           -> (res   : Type)
-          -> (rel   : a -> a -> Type)
-          -> (seed  : a) -> Type where
+          -> Type where
 
   ||| Keep iterating with a new `seed2`, which is
   ||| related to the current `seed` via `rel`.
@@ -39,10 +40,25 @@ data Step :  (accum : Type)
   Cont :  (seed2 : a)
        -> (vst   : st)
        -> (0 prf : rel seed2 seed)
-       -> Step st res rel seed
+       -> Step rel seed st res
 
   ||| Stop iterating and return the given result.
-  Done : (vres : res) -> Step st res rel v
+  Done : (vres : res) -> Step rel v st res
+
+public export
+Bifunctor (Step rel seed) where
+  bimap f _ (Cont s2 st prf) = Cont s2 (f st) prf
+  bimap _ g (Done res)       = Done (g res)
+
+  mapFst f (Cont s2 st prf) = Cont s2 (f st) prf
+  mapFst _ (Done res)       = Done res
+
+  mapSnd _ (Cont s2 st prf) = Cont s2 st prf
+  mapSnd g (Done res)       = Done (g res)
+
+--------------------------------------------------------------------------------
+--          MonadRec
+--------------------------------------------------------------------------------
 
 ||| Interface for tail-call optimized monadic recursion.
 public export
@@ -58,7 +74,7 @@ interface Monad m => TailRecM m where
   ||| requires an erased proof of accessibility.
   total
   tailRecM :  {0 rel : a -> a -> Type}
-           -> (step  : (seed2 : a) -> st -> m (Step st b rel seed2))
+           -> (step  : (seed2 : a) -> st -> m (Step rel seed2 st b))
            -> (seed  : a)
            -> (ini   : st)
            -> (0 prf : Accessible rel seed)
@@ -68,7 +84,7 @@ public export %inline
 ||| Monadic tail recursion over a sized structure.
 trSized :  TailRecM m
         => (0 _ : Sized a)
-        => (step : (v : a) -> st -> m (Step st b Smaller v))
+        => (step : (v : a) -> st -> m (Step Smaller v st b))
         -> (seed : a)
         -> (ini  : st)
         -> m b
@@ -98,7 +114,7 @@ TailRecM (Either e) where
     Right (Done b)         => Right b
     Right (Cont y st2 prf) => tailRecM f y st2 (rec y prf)
 
-trIO :  (f : (v : a) -> st -> IO (Step st b rel v))
+trIO :  (f : (v : a) -> st -> IO (Step rel v st b))
      -> (x : a)
      -> (ini : st)
      -> (0 _ : Accessible rel x)
@@ -123,15 +139,14 @@ TailRecM IO where
 ---------------------------
 -- StateT
 
+%inline
 convST :  Functor m
-       => (f : (v : a) -> st -> StateT s m (Step st b rel v))
+       => (f : (v : a) -> st -> StateT s m (Step rel v st b))
        -> (v : a)
        -> (st,s)
-       -> m (Step (st,s) (s,b) rel v)
-convST f v (st1,s1) = map conv $ runStateT s1 (f v st1)
-  where conv : (s, Step st b rel v) -> Step (st,s) (s,b) rel v
-        conv (s2,Done res)        = Done (s2, res)
-        conv (s2,Cont v2 st2 prf) = Cont v2 (st2,s2) prf
+       -> m (Step rel v (st,s) (s,b))
+convST f v (st1,s1) =   (\(s2,stp) => bimap (,s2) (s2,) stp)
+                    <$> runStateT s1 (f v st1)
 
 public export
 TailRecM m => TailRecM (StateT s m) where
@@ -142,12 +157,12 @@ TailRecM m => TailRecM (StateT s m) where
 -- EitherT
 
 convE :  Functor m
-      => (f : (v : a) -> st -> EitherT e m (Step st b rel v))
+      => (f : (v : a) -> st -> EitherT e m (Step rel v st b))
       -> (v : a)
       -> (ini : st)
-      -> m (Step st (Either e b) rel v)
+      -> m (Step rel v st (Either e b))
 convE f v s1 = map conv $ runEitherT (f v s1)
-  where conv : Either e (Step st b rel v) -> Step st (Either e b) rel v
+  where conv : Either e (Step rel v st b) -> Step rel v st (Either e b)
         conv (Left err)                = Done (Left err)
         conv (Right $ Done b)          = Done (Right b)
         conv (Right $ Cont v2 st2 prf) = Cont v2 st2 prf
@@ -161,13 +176,13 @@ TailRecM m => TailRecM (EitherT e m) where
 -- MaybeT
 
 convM :  Functor m
-      => (f : (v : a) -> st -> MaybeT m (Step st b rel v))
+      => (f : (v : a) -> st -> MaybeT m (Step rel v st b))
       -> (v : a)
       -> (ini : st)
-      -> m (Step st (Maybe b) rel v)
+      -> m (Step rel v st (Maybe b))
 convM f v s1 = map conv $ runMaybeT (f v s1)
-  where conv : Maybe (Step st b rel v) -> Step st (Maybe b) rel v
-        conv Nothing                   = Done Nothing
+  where conv : Maybe (Step rel v st b) -> Step rel v st (Maybe b)
+        conv Nothing                  = Done Nothing
         conv (Just $ Done b)          = Done (Just b)
         conv (Just $ Cont v2 st2 prf) = Cont v2 st2 prf
 
@@ -179,11 +194,11 @@ TailRecM m => TailRecM (MaybeT m) where
 ---------------------------
 -- ReaderT
 
-convR :  (f : (v : a) -> st -> ReaderT e m (Step st b rel v))
+convR :  (f : (v : a) -> st -> ReaderT e m (Step rel v st b))
       -> (env : e)
       -> (v : a)
       -> (ini : st)
-      -> m (Step st b rel v)
+      -> m (Step rel v st b)
 convR f env v s1 = runReaderT env (f v s1)
 
 public export
@@ -195,14 +210,12 @@ TailRecM m => TailRecM (ReaderT e m) where
 -- WriterT
 
 convW :  Functor m
-      => (f : (v : a) -> st -> WriterT w m (Step st b rel v))
+      => (f : (v : a) -> st -> WriterT w m (Step rel v st b))
       -> (v : a)
       -> (st,w)
-      -> m (Step (st,w) (b,w) rel v)
-convW f v (s1,w1) = conv <$> unWriterT (f v s1) w1
-  where conv : (Step st b rel v, w) -> Step (st,w) (b,w) rel v
-        conv (Done res, w2)        = Done (res, w2)
-        conv (Cont v2 st2 prf, w2) = Cont v2 (st2,w2) prf
+      -> m (Step rel v (st,w) (b,w))
+convW f v (s1,w1) =   (\(stp,w2) => bimap (,w2) (,w2) stp)
+                  <$> unWriterT (f v s1) w1
 
 public export
 TailRecM m => TailRecM (WriterT w m) where
@@ -213,15 +226,13 @@ TailRecM m => TailRecM (WriterT w m) where
 -- RWST
 
 convRWS :  Functor m
-        => (f : (v : a) -> st -> RWST r w s m (Step st b rel v))
+        => (f : (v : a) -> st -> RWST r w s m (Step rel v st b))
         -> (env : r)
         -> (v : a)
         -> (st,s,w)
-        -> m (Step (st,s,w) (b,s,w) rel v)
-convRWS f env v (st1,s1,w1) = conv <$> unRWST (f v st1) env s1 w1
-  where conv : (Step st b rel v, s, w) -> Step (st,s,w) (b,s,w) rel v
-        conv (Done res, s2,w2)     = Done (res, s2, w2)
-        conv (Cont v2 st2 prf, s2, w2) = Cont v2 (st2,s2,w2) prf
+        -> m (Step rel v (st,s,w) (b,s,w))
+convRWS f env v (st1,s1,w1) =   (\(stp,s2,w2) => bimap (,s2,w2) (,s2,w2) stp)
+                            <$> unRWST (f v st1) env s1 w1
 
 public export
 TailRecM m => TailRecM (RWST r w s m) where
