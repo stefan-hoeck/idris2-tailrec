@@ -38,8 +38,8 @@ data Step :  (rel   : a -> a -> Type)
   ||| related to the current `seed` via `rel`.
   ||| `vst` is the accumulated state of the iteration.
   Cont :  (seed2 : a)
-       -> (vst   : st)
        -> (0 prf : rel seed2 seed)
+       -> (vst   : st)
        -> Step rel seed st res
 
   ||| Stop iterating and return the given result.
@@ -47,13 +47,13 @@ data Step :  (rel   : a -> a -> Type)
 
 public export
 Bifunctor (Step rel seed) where
-  bimap f _ (Cont s2 st prf) = Cont s2 (f st) prf
+  bimap f _ (Cont s2 prf st) = Cont s2 prf (f st)
   bimap _ g (Done res)       = Done (g res)
 
-  mapFst f (Cont s2 st prf) = Cont s2 (f st) prf
+  mapFst f (Cont s2 prf st) = Cont s2 prf (f st)
   mapFst _ (Done res)       = Done res
 
-  mapSnd _ (Cont s2 st prf) = Cont s2 st prf
+  mapSnd _ (Cont s2 prf st) = Cont s2 prf st
   mapSnd g (Done res)       = Done (g res)
 
 --------------------------------------------------------------------------------
@@ -98,21 +98,21 @@ public export
 TailRecM Identity where
   tailRecM f seed st1 (Access rec) = case f seed st1 of
     Id (Done b)         => Id b
-    Id (Cont y st2 prf) => tailRecM f y st2 (rec y prf)
+    Id (Cont y prf st2) => tailRecM f y st2 (rec y prf)
 
 public export
 TailRecM Maybe where
   tailRecM f seed st1 (Access rec) = case f seed st1 of
     Nothing               => Nothing
     Just (Done b)         => Just b
-    Just (Cont y st2 prf) => tailRecM f y st2 (rec y prf)
+    Just (Cont y prf st2) => tailRecM f y st2 (rec y prf)
 
 public export
 TailRecM (Either e) where
   tailRecM f seed st1 (Access rec) = case f seed st1 of
     Left e                 => Left e
     Right (Done b)         => Right b
-    Right (Cont y st2 prf) => tailRecM f y st2 (rec y prf)
+    Right (Cont y prf st2) => tailRecM f y st2 (rec y prf)
 
 trIO :  (f : (v : a) -> st -> IO (Step rel v st b))
      -> (x : a)
@@ -126,7 +126,7 @@ trIO f x ini acc = fromPrim $ run x ini acc
             -> IORes b
         run y st1 (Access rec) w = case toPrim (f y st1) w of
           MkIORes (Done b) w2          => MkIORes b w2
-          MkIORes (Cont y2 st2 prf) w2 => run y2 st2 (rec y2 prf) w2
+          MkIORes (Cont y2 prf st2) w2 => run y2 st2 (rec y2 prf) w2
 
 public export %inline
 TailRecM IO where
@@ -165,7 +165,7 @@ convE f v s1 = map conv $ runEitherT (f v s1)
   where conv : Either e (Step rel v st b) -> Step rel v st (Either e b)
         conv (Left err)                = Done (Left err)
         conv (Right $ Done b)          = Done (Right b)
-        conv (Right $ Cont v2 st2 prf) = Cont v2 st2 prf
+        conv (Right $ Cont v2 prf st2) = Cont v2 prf st2
 
 public export
 TailRecM m => TailRecM (EitherT e m) where
@@ -184,7 +184,7 @@ convM f v s1 = map conv $ runMaybeT (f v s1)
   where conv : Maybe (Step rel v st b) -> Step rel v st (Maybe b)
         conv Nothing                  = Done Nothing
         conv (Just $ Done b)          = Done (Just b)
-        conv (Just $ Cont v2 st2 prf) = Cont v2 st2 prf
+        conv (Just $ Cont v2 prf st2) = Cont v2 prf st2
 
 public export
 TailRecM m => TailRecM (MaybeT m) where
