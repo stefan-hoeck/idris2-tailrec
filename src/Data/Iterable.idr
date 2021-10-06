@@ -40,10 +40,10 @@ interface Iterable container element | container where
 export
 forM_ :  Iterable container element
       => MonadRec m
-      => (run  : m ())
+      => (run  : element -> m ())
       -> (seed : container)
       -> m ()
-forM_ run = iterM (\_,_ => run) (const ()) ()
+forM_ run = iterM (\e,_ => run e) (const ()) ()
 
 export
 foldM :  Iterable container element

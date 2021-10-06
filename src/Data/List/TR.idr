@@ -22,8 +22,15 @@ replicateTR n va = run Nil n
         run xs (S k) = run (va :: xs) k
 
 export
-itertateTR : Nat -> (a -> a) -> a -> List a
-itertateTR n f = run Nil n
+iterateTR : Nat -> (a -> a) -> a -> List a
+iterateTR n f = run Nil n
   where run : List a -> Nat -> a -> List a
         run xs 0     _  = reverse xs
         run xs (S k) va = run (va :: xs) k (f va)
+
+export
+mapTR : (a -> b) -> List a -> List b
+mapTR f = run Nil
+  where run : List b -> List a -> List b
+        run bs []       = reverse bs
+        run bs (h :: t) = run (f h :: bs) t
