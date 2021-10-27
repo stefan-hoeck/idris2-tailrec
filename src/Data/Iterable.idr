@@ -1,25 +1,9 @@
 module Data.Iterable
 
-import Data.Fuel
-import Data.Nat
 import Data.List1
 import Data.SnocList
 
-import Control.MonadRec
-import Control.WellFounded
-
---------------------------------------------------------------------------------
---          Sized Implementations
---------------------------------------------------------------------------------
-
-public export
-Sized Fuel where
-  size Dry      = 0
-  size (More f) = S $ size f
-
-public export
-Sized (SnocList a) where
-  size = length
+import public Control.MonadRec
 
 --------------------------------------------------------------------------------
 --          Iterable

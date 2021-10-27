@@ -1,6 +1,6 @@
 module Control.MonadRec
 
-import Control.WellFounded
+import public Control.WellFounded
 import Control.Monad.Either
 import Control.Monad.Identity
 import Control.Monad.Maybe
@@ -10,9 +10,24 @@ import Control.Monad.State
 import Control.Monad.Writer
 
 import Data.List
-import Data.Nat
+import Data.SnocList
+import public Data.Fuel
+import public Data.Nat
 
 %default total
+
+--------------------------------------------------------------------------------
+--          Sized Implementations
+--------------------------------------------------------------------------------
+
+public export
+Sized Fuel where
+  size Dry      = 0
+  size (More f) = S $ size f
+
+public export
+Sized (SnocList a) where
+  size = length
 
 --------------------------------------------------------------------------------
 --          Step
