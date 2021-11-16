@@ -89,21 +89,21 @@ interface Monad m => MonadRec m where
   ||| requires an erased proof of accessibility.
   total
   tailRecM :  {0 rel : a -> a -> Type}
-           -> (step  : (seed2 : a) -> st -> m (Step rel seed2 st b))
            -> (seed  : a)
            -> (ini   : st)
            -> (0 prf : Accessible rel seed)
+           -> (step  : (seed2 : a) -> st -> m (Step rel seed2 st b))
            -> m b
 
 public export %inline
 ||| Monadic tail recursion over a sized structure.
 trSized :  MonadRec m
         => (0 _ : Sized a)
-        => (step : (v : a) -> st -> m (Step Smaller v st b))
-        -> (seed : a)
+        => (seed : a)
         -> (ini  : st)
+        -> (step : (v : a) -> st -> m (Step Smaller v st b))
         -> m b
-trSized f x ini = tailRecM f x ini (sizeAccessible x)
+trSized x ini = tailRecM x ini (sizeAccessible x)
 
 --------------------------------------------------------------------------------
 --          Base Implementations
@@ -111,30 +111,30 @@ trSized f x ini = tailRecM f x ini (sizeAccessible x)
 
 public export
 MonadRec Identity where
-  tailRecM f seed st1 (Access rec) = case f seed st1 of
+  tailRecM seed st1 (Access rec) f = case f seed st1 of
     Id (Done b)         => Id b
-    Id (Cont y prf st2) => tailRecM f y st2 (rec y prf)
+    Id (Cont y prf st2) => tailRecM y st2 (rec y prf) f
 
 public export
 MonadRec Maybe where
-  tailRecM f seed st1 (Access rec) = case f seed st1 of
+  tailRecM seed st1 (Access rec) f = case f seed st1 of
     Nothing               => Nothing
     Just (Done b)         => Just b
-    Just (Cont y prf st2) => tailRecM f y st2 (rec y prf)
+    Just (Cont y prf st2) => tailRecM y st2 (rec y prf) f
 
 public export
 MonadRec (Either e) where
-  tailRecM f seed st1 (Access rec) = case f seed st1 of
+  tailRecM seed st1 (Access rec) f = case f seed st1 of
     Left e                 => Left e
     Right (Done b)         => Right b
-    Right (Cont y prf st2) => tailRecM f y st2 (rec y prf)
+    Right (Cont y prf st2) => tailRecM y st2 (rec y prf) f
 
-trIO :  (f : (v : a) -> st -> IO (Step rel v st b))
-     -> (x : a)
+trIO :  (x : a)
      -> (ini : st)
      -> (0 _ : Accessible rel x)
+     -> (f : (v : a) -> st -> IO (Step rel v st b))
      -> IO b
-trIO f x ini acc = fromPrim $ run x ini acc
+trIO x ini acc f = fromPrim $ run x ini acc
   where run :  (y : a) -> (st1 : st)
             -> (0 _ : Accessible rel y)
             -> (1 w : %World)
@@ -165,8 +165,8 @@ convST f v (st1,s1) =   (\(s2,stp) => bimap (,s2) (s2,) stp)
 
 public export
 MonadRec m => MonadRec (StateT s m) where
-  tailRecM f x ini acc =
-    ST $ \s1 => tailRecM (convST f) x (ini,s1) acc
+  tailRecM x ini acc f =
+    ST $ \s1 => tailRecM x (ini,s1) acc (convST f)
 
 ---------------------------
 -- EitherT
@@ -184,8 +184,8 @@ convE f v s1 = map conv $ runEitherT (f v s1)
 
 public export
 MonadRec m => MonadRec (EitherT e m) where
-  tailRecM f x ini acc =
-    MkEitherT $ tailRecM (convE f) x ini acc
+  tailRecM x ini acc f =
+    MkEitherT $ tailRecM x ini acc (convE f)
 
 ---------------------------
 -- MaybeT
@@ -203,8 +203,8 @@ convM f v s1 = map conv $ runMaybeT (f v s1)
 
 public export
 MonadRec m => MonadRec (MaybeT m) where
-  tailRecM f x ini acc =
-    MkMaybeT $ tailRecM (convM f) x ini acc
+  tailRecM x ini acc f =
+    MkMaybeT $ tailRecM x ini acc (convM f)
 
 ---------------------------
 -- ReaderT
@@ -218,8 +218,8 @@ convR f env v s1 = runReaderT env (f v s1)
 
 public export
 MonadRec m => MonadRec (ReaderT e m) where
-  tailRecM f x ini acc =
-    MkReaderT $ \env => tailRecM (convR f env) x ini acc
+  tailRecM x ini acc f =
+    MkReaderT $ \env => tailRecM x ini acc (convR f env)
 
 ---------------------------
 -- WriterT
@@ -234,8 +234,8 @@ convW f v (s1,w1) =   (\(stp,w2) => bimap (,w2) (,w2) stp)
 
 public export
 MonadRec m => MonadRec (WriterT w m) where
-  tailRecM f x ini acc =
-    MkWriterT $ \w1 => tailRecM (convW f) x (ini,w1) acc
+  tailRecM x ini acc f =
+    MkWriterT $ \w1 => tailRecM x (ini,w1) acc (convW f)
 
 ---------------------------
 -- RWST
@@ -251,5 +251,5 @@ convRWS f env v (st1,s1,w1) =   (\(stp,s2,w2) => bimap (,s2,w2) (,s2,w2) stp)
 
 public export
 MonadRec m => MonadRec (RWST r w s m) where
-  tailRecM f x ini acc =
-    MkRWST $ \r1,s1,w1 => tailRecM (convRWS f r1) x (ini,s1,w1) acc
+  tailRecM x ini acc f =
+    MkRWST $ \r1,s1,w1 => tailRecM x (ini,s1,w1) acc (convRWS f r1)
