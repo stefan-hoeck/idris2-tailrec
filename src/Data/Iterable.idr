@@ -45,18 +45,16 @@ foldM calc = iterM (\e,acc => (<+> acc) <$> calc e) id neutral
 export
 Iterable Nat Nat where
   iterM accum done ini seed =
-    trSized go seed ini
-    where go : (n : Nat) -> st -> m (Step Smaller n st res)
-          go Z st       = pure . Done $ done st
-          go v@(S k) st = Cont k refl <$> accum v st
+    trSized seed ini $
+      \case Z       => pure . Done . done
+            v@(S k) => map (Cont k refl) . accum v
 
 export
 Iterable (List a) a where
   iterM accum done ini seed =
-    trSized go seed ini
-    where go : (as : List a) -> st -> m (Step Smaller as st res)
-          go Nil st      = pure . Done $ done st
-          go (h :: t) st = Cont t refl <$> accum h st
+    trSized seed ini $
+      \case Nil    => pure . Done . done
+            h :: t => map (Cont t refl) . accum h
 
 export
 Iterable (List1 a) a where
@@ -65,15 +63,13 @@ Iterable (List1 a) a where
 export
 Iterable Fuel () where
   iterM accum done ini seed =
-    trSized go seed ini
-    where go : (f : Fuel) -> st -> m (Step Smaller f st res)
-          go Dry st      = pure . Done $ done st
-          go (More f) st = Cont f refl <$> accum () st
+    trSized seed ini $
+      \case Dry    => pure . Done . done
+            More f => map (Cont f refl) . accum ()
 
 export
 Iterable (SnocList a) a where
   iterM accum done ini seed =
-    trSized go seed ini
-    where go : (as : SnocList a) -> st -> m (Step Smaller as st res)
-          go [<]       st = pure . Done $ done st
-          go (sx :< x) st = Cont sx refl <$> accum x st
+    trSized seed ini $
+      \case [<]     => pure . Done . done
+            sx :< x => map (Cont sx refl) . accum x
