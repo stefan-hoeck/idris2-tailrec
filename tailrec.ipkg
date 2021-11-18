@@ -11,3 +11,9 @@ depends    = base    >= 0.4.0
 modules = Control.MonadRec
         , Data.Iterable
         , Data.List.TR
+
+        , Data.TypeAligned.CatList
+        , Data.TypeAligned.List
+        , Data.TypeAligned.Queue
+        , Data.TypeAligned.SnocList
+        , Data.TypeAligned.View
