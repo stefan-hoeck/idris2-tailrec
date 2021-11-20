@@ -6,53 +6,72 @@ import Data.TypeAligned
 
 %default total
 
-public export
-0 Bind : (m : Type -> Type) -> (a,b : Type) -> Type
+mutual
+  public export
+  record Free (f : Type -> Type) (a : Type) where
+    constructor MkFree
+    view : FreeView f t
+    arrs : Arrs f t a
 
-public export
-0 BindList : (m : Type -> Type) -> (a,b : Type) -> Type
+  public export
+  data FreeView : (f : Type -> Type) -> (a : Type) -> Type where
+    Pure : (val : a) -> FreeView f a
+    Bind : (f b) -> (b -> Free f a) -> FreeView f a
 
-public export
-data Free : (m : Type -> Type) -> (a : Type) -> Type where
-  Pure    : (val : a) -> Free m a
-  Impure  : (ma  : m a) -> (q : BindList m a b) -> Free m b
+  public export
+  0 Arr : (f : Type -> Type) -> (a,b : Type) -> Type
+  Arr f a b = a -> Free f b
 
-Bind m a b = a -> Free m b
+  public export
+  0 Arrs : (f : Type -> Type) -> (a,b : Type) -> Type
+  Arrs = TCatList . Arr
 
-BindList = TCatList . Bind
+export %inline
+fromView : FreeView f a -> Free f a
+fromView f = MkFree f empty
+
+concatF : Free f a -> Arrs f a b -> Free f b
+concatF (MkFree v r) l = MkFree v (r ++ l)
 
 export
-lift : m a -> Free m a
-lift ma = Impure ma CatNil
+toView : Free f a -> FreeView f a
+toView (MkFree v s) = case v of
+  Pure val => case uncons s of
+    Empty    => Pure val
+    (h :| t) => assert_total $ toView (concatF (h val) t)
+
+  Bind x k => Bind x (\va => concatF (k va) s)
 
 --------------------------------------------------------------------------------
 --          Implementations
 --------------------------------------------------------------------------------
 
-bind : Free m a -> (a -> Free m b) -> Free m b
-bind (Pure val)    f = f val
-bind (Impure ma q) f = Impure ma $ snoc q f
+bind : Free f a -> (a -> Free f b) -> Free f b
+bind (MkFree v r) g = MkFree v $ snoc r g
 
 public export
-Functor (Free m) where
-  map f (Pure val)    = Pure $ f val
-  map f (Impure ma q) = Impure ma $ snoc q (Pure . f)
+Functor (Free f) where
+  map g fr = bind fr (fromView . Pure . g)
 
 public export
-Applicative (Free m) where
-  pure = Pure
+Applicative (Free f) where
+  pure = fromView . Pure
   f <*> v = bind f (\f => map (f $) v)
 
 public export %inline
-Monad (Free m) where
+Monad (Free f) where
   (>>=) = bind
 
 public export
-MonadRec (Free m) where
+MonadRec (Free f) where
   tailRecM seed vst (Access rec) step = do
     Cont s2 prf vst2 <- step seed vst
       | Done v => pure v
     tailRecM s2 vst2 (rec s2 prf) step
+
+export
+lift : m a -> Free m a
+lift ma = fromView (Bind ma pure)
 
 export
 HasIO m => HasIO (Free m) where
@@ -63,57 +82,57 @@ HasIO m => HasIO (Free m) where
 --------------------------------------------------------------------------------
 
 export
-qApp : BindList m a b -> a -> Free m b
-qApp q va = case uncons q of
-  Empty    => Pure va
-  (f :| r) => case f va of
-     Pure val     => qApp (assert_smaller q r) val
-     Impure ma q2 => Impure ma $ q2 ++ r
+wrap : f (Free f a) -> Free f a
+wrap x = fromView (Bind x id)
 
 export
-resume : Functor m => Free m a -> Either (m $ Free m a) a
-resume (Pure val)    = Right val
-resume (Impure ma q) = Left $ map (qApp q) ma
+substFree : (forall x . f x -> Free g x) -> Free f a -> Free g a
+substFree k = go
+  where go : Free f y -> Free g y
+        go f = case toView f of
+          Pure a   => pure a
+          Bind g i => assert_total $ k g >>= go . i
 
+||| Unwraps a single layer of `f`, providing the continuation.
 export
-substFree : (forall x . m x -> Free  n x) -> Free m a -> Free n a
-substFree _ (Pure val)    = Pure val
-substFree f (Impure ma q) = assert_total $ f ma >>= (substFree f . qApp q)
+resume' :  (forall b. f b -> (b -> Free f a) -> r)
+        -> (a -> r)
+        -> Free f a
+        -> r
+resume' k j f = case toView f of
+  Pure a   => j a
+  Bind g i => k g i
+
+||| Unwraps a single layer of the functor `f`.
+export
+resume : Functor f => Free f a -> Either (f (Free f a)) a
+resume = resume' (\g,i => Left (i <$> g)) Right
 
 export
 mapK : (f : forall t . m t -> n t) -> Free m a -> Free n a
 mapK f = substFree (lift . f)
 
 export
-goWhile :  Functor m
-        => Fuel
-        -> (m (Free m a) -> Free m a)
-        -> Free m a
-        -> Either (Free m a) a
-goWhile fuel extract free = go fuel free
-  where go : Fuel -> Free m a -> Either (Free m a) a
-        go Dry y = Left y
-        go (More x) y = case resume y of
-          Right v => Right v
-          Left y2 => go x (extract y2)
+fold : MonadRec m => (forall x . f x -> m x) -> Free f a -> m a
+fold k fr = assert_total $ trSized forever fr $ \fu,frm => case fu of
+  More x => case toView frm of
+    Pure val => Done <$> pure val
+    Bind g i => Cont x (reflexive {rel = LTE}) . i <$> k g
+  Dry    => idris_crash "Control.Monad.Free.foldFree: ran out of fuel"
 
 export
-runM :  Functor m
-     => MonadRec n
-     => Fuel
-     -> (m (Free m a) -> n (Free m a))
-     -> Free m a
-     -> n (Either (Free m a) a)
-runM fuel g free = trSized fuel free $ \fu,fr => case fu of
-  Dry    => pure (Done $ Left fr)
+run : Functor f => (f (Free f a) -> Free f a) -> Free f a -> a
+run k = go
+  where go : Free f a -> a
+        go f = case toView f of
+          Pure a   => a
+          Bind g i => assert_total $ go (k (i <$> g))
+
+export
+runM : Functor m => MonadRec n =>
+       (m (Free m a) -> n (Free m a)) -> Free m a -> n a
+runM g free = assert_total $ trSized forever free $ \fu,fr => case fu of
   More x => case resume fr of
-    Right va => pure (Done $ Right va)
+    Right va => pure (Done va)
     Left  ma => Cont x (reflexive {rel = LTE}) <$> g ma
-
-export
-foldWhile :  MonadRec n
-          => Fuel
-          -> (forall x . m x -> n x)
-          -> Free m a
-          -> n (Either (Free n a) a)
-foldWhile fuel f free = runM fuel id (mapK f free)
+  Dry    => idris_crash "Control.Monad.Free.runM: ran out of fuel"
