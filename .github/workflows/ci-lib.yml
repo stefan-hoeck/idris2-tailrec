@@ -24,7 +24,6 @@ defaults:
 jobs:
   build:
     name: Build the lib with Idris2 latest
-    needs: read-ver
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
