@@ -1,0 +1,4 @@
+[custom.all.tailrec]
+type   = "local"
+path   = "."
+ipkg   = "tailrec.ipkg"

@@ -10,12 +10,6 @@ on:
   pull_request:
     branches:
       - main
-      - master
-  schedule:
-    # We want to run right after the `latest` image is published.
-    # So, let's do it an hour right after. Look the schedule of publishing here:
-    # https://github.com/alexhumphreys/idris2-dockerfile/blob/main/.github/workflows/docker-image.yml
-    - cron: '0 1 * * *'
 
 defaults:
   run:
@@ -23,13 +17,15 @@ defaults:
 
 jobs:
   build:
-    name: Build the lib with Idris2 latest
+    name: Build ${{ github.repository }} with Idris2 latest
     runs-on: ubuntu-latest
+    env:
+      PACK_DIR: /root/.pack
     strategy:
       fail-fast: false
-    container: snazzybucket/idris2api:latest
+    container: ghcr.io/stefan-hoeck/idris2-pack:latest
     steps:
       - name: Checkout
         uses: actions/checkout@v2
       - name: Build lib
-        run: make lib
+        run: pack install tailrec
