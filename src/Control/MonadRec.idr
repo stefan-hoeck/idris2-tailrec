@@ -115,6 +115,14 @@ trSized :  MonadRec m
         -> m b
 trSized x ini = tailRecM x (sizeAccessible x) ini
 
+||| This is NOT a tail-recursive implementation, allowing any monad be used
+||| with the same API as if it is tail-recursive. Avoid using it at all costs!
+export
+[NonStackSafe] Monad m => MonadRec m where
+  tailRecM seed (Access acc) init step = step seed init >>= \case
+    Cont seed2 prf vst => tailRecM seed2 (acc seed2 prf) vst step
+    Done vres          => pure vres
+
 --------------------------------------------------------------------------------
 --          Base Implementations
 --------------------------------------------------------------------------------
