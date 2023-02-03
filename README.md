@@ -1,7 +1,7 @@
 # idris2-tailrec : Total stack-safe monadic Recursion in Idris2
 
 Writing recursive functions that do not overflow the stack
-can be challenging. The Javascript backends in Idris2
+can be challenging. The JavaScript backends in Idris2
 optimize mutually tail-recursive
 functions into while loops, which makes them use constant stack space.
 Chez scheme, the target of the default backend
@@ -28,7 +28,7 @@ main = count 10000000
 ```
 
 Other languages like PureScript or Scala
-solve this by introducing a new type class 
+solve this by introducing a new type class
 (see the [purescript-tailrec](https://github.com/purescript/purescript-tailrec)
 library) or by adding support for stack safe recursion
 directly to their monad interface
@@ -114,16 +114,16 @@ Interface `MonadRec` together with an implementation for
 
 ```idris
 interface Monad m => MonadRec2 m where
-  tailRecM2 :  (step : (seed : a) -> st -> m (Step st b rel seed))
-            -> (seed : a)
+  tailRecM2 :  (seed : a)
             -> (initialState : st)
+            -> (step : (seed : a) -> st -> m (Step st b rel seed))
             -> m b
 
 MonadRec2 Maybe where
-  tailRecM2 f seed ini = case f seed ini of
+  tailRecM2 seed ini f = case f seed ini of
     Nothing              => Nothing
     Just (Done b)        => Just b
-    Just (Cont s2 st2 _) => tailRecM2 f s2 st2
+    Just (Cont s2 st2 _) => tailRecM2 s2 st2 f
 ```
 
 The interesting part is the `step` function we pass to `tailRecM2`.
@@ -139,7 +139,7 @@ totality checker and rightfully so:
 
 ```idris
 forever2 : Maybe Nat
-forever2 = tailRecM2 go () ()
+forever2 = tailRecM2 () () go
   where go : (seed : ()) -> () -> Maybe (Step () Nat Equal seed)
         go () () = Just $ Cont () () Refl
 ```
@@ -172,17 +172,17 @@ manner or not.
 ```idris
 interface Monad m => MonadRec m where
   total
-  tailRecM :  (step : (seed : a) -> st -> m (Step st b rel seed))
-           -> (seed : a)
-           -> (initialState : st)
+  tailRecM :  (seed : a)
            -> (0 acc : Accessible rel seed)
+           -> (initialState : st)
+           -> (step : (seed : a) -> st -> m (Step st b rel seed))
            -> m b
 
 MonadRec Maybe where
-  tailRecM f seed ini (Access rec) = case f seed ini of
+  tailRecM seed (Access rec) ini f = case f seed ini of
     Nothing                => Nothing
     Just (Done b)          => Just b
-    Just (Cont s2 st2 rel) => tailRecM f s2 st2 (rec s2 rel)
+    Just (Cont s2 st2 rel) => tailRecM s2 (rec s2 rel) st2 f
 ```
 
 That was not too hard. The only constructor of `Accessible rel v1` provides
@@ -228,7 +228,7 @@ at us.
 
 ## Why `st` then?
 
-When I was experimenting with this for the first time, 
+When I was experimenting with this for the first time,
 I found that during recursion we often need some form of
 accumulator, and, contrary to the data structure or
 value, over which we iterate, the accumulator typically
