@@ -95,6 +95,16 @@ interface Monad m => MonadRec m where
            -> (step  : (seed2 : a) -> st -> m (Step rel seed2 st b))
            -> m b
 
+||| Monadic tail recursion over a well-founded structure.
+public export %inline
+trWellFounded :  MonadRec m
+              => (0 _   : WellFounded a rel)
+              => (seed  : a)
+              -> (ini   : st)
+              -> (step  : (seed2 : a) -> st -> m (Step rel seed2 st b))
+              -> m b
+trWellFounded seed = tailRecM seed (wellFounded seed)
+
 public export %inline
 ||| Monadic tail recursion over a sized structure.
 trSized :  MonadRec m
