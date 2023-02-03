@@ -1,7 +1,7 @@
 # idris2-tailrec : Total stack-safe monadic Recursion in Idris2
 
 Writing recursive functions that do not overflow the stack
-can be challenging. The Javascript backends in Idris2
+can be challenging. The JavaScript backends in Idris2
 optimize mutually tail-recursive
 functions into while loops, which makes them use constant stack space.
 Chez scheme, the target of the default backend
