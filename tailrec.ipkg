@@ -9,6 +9,7 @@ license    = "BSD-3 Clause"
 sourcedir  = "src"
 depends    = base    >= 0.6.0
 
-modules = Control.MonadRec
+modules = Control.Monad.Either.Extra
+        , Control.MonadRec
         , Data.Iterable
         , Data.List.TR
