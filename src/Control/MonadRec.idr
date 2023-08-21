@@ -88,31 +88,34 @@ interface Monad m => MonadRec m where
   ||| end after a finite number of steps, this function
   ||| requires an erased proof of accessibility.
   total
-  tailRecM :  {0 rel : a -> a -> Type}
-           -> (seed  : a)
-           -> (0 prf : Accessible rel seed)
-           -> (ini   : st)
-           -> (step  : (seed2 : a) -> st -> m (Step rel seed2 st b))
-           -> m b
+  tailRecM :
+       {0 rel : a -> a -> Type}
+    -> (seed  : a)
+    -> (0 prf : Accessible rel seed)
+    -> (ini   : st)
+    -> (step  : (seed2 : a) -> st -> m (Step rel seed2 st b))
+    -> m b
 
 ||| Monadic tail recursion over a well-founded structure.
 public export %inline
-trWellFounded :  MonadRec m
-              => (0 _   : WellFounded a rel)
-              => (seed  : a)
-              -> (ini   : st)
-              -> (step  : (seed2 : a) -> st -> m (Step rel seed2 st b))
-              -> m b
+trWellFounded :
+     {auto _ : MonadRec m}
+  -> {auto 0 _ : WellFounded a rel}
+  -> (seed  : a)
+  -> (ini   : st)
+  -> (step  : (seed2 : a) -> st -> m (Step rel seed2 st b))
+  -> m b
 trWellFounded seed = tailRecM seed (wellFounded seed)
 
 public export %inline
 ||| Monadic tail recursion over a sized structure.
-trSized :  MonadRec m
-        => (0 _ : Sized a)
-        => (seed : a)
-        -> (ini  : st)
-        -> (step : (v : a) -> st -> m (Step Smaller v st b))
-        -> m b
+trSized :
+     {auto _ : MonadRec m}
+  -> {auto 0 _ : Sized a}
+  -> (seed : a)
+  -> (ini  : st)
+  -> (step : (v : a) -> st -> m (Step Smaller v st b))
+  -> m b
 trSized x ini = tailRecM x (sizeAccessible x) ini
 
 ||| This is NOT a tail-recursive implementation, allowing any monad be used
@@ -147,20 +150,24 @@ MonadRec (Either e) where
     Right (Done b)         => Right b
     Right (Cont y prf st2) => tailRecM y (rec y prf) st2 f
 
-trIO :  (x : a)
-     -> (0 _ : Accessible rel x)
-     -> (ini : st)
-     -> (f : (v : a) -> st -> IO (Step rel v st b))
-     -> IO b
+trIO :
+     (x : a)
+  -> (0 _ : Accessible rel x)
+  -> (ini : st)
+  -> (f : (v : a) -> st -> IO (Step rel v st b))
+  -> IO b
 trIO x acc ini f = fromPrim $ run x acc ini
-  where run :  (y : a)
-            -> (0 _ : Accessible rel y)
-            -> (st1 : st)
-            -> (1 w : %World)
-            -> IORes b
-        run y (Access rec) st1 w = case toPrim (f y st1) w of
-          MkIORes (Done b) w2          => MkIORes b w2
-          MkIORes (Cont y2 prf st2) w2 => run y2 (rec y2 prf) st2 w2
+
+  where
+    run :
+         (y : a)
+      -> (0 _ : Accessible rel y)
+      -> (st1 : st)
+      -> (1 w : %World)
+      -> IORes b
+    run y (Access rec) st1 w = case toPrim (f y st1) w of
+      MkIORes (Done b) w2          => MkIORes b w2
+      MkIORes (Cont y2 prf st2) w2 => run y2 (rec y2 prf) st2 w2
 
 public export %inline
 MonadRec IO where
@@ -174,13 +181,14 @@ MonadRec IO where
 -- StateT
 
 %inline
-convST :  Functor m
-       => (f : (v : a) -> st -> StateT s m (Step rel v st b))
-       -> (v : a)
-       -> (st,s)
-       -> m (Step rel v (st,s) (s,b))
-convST f v (st1,s1) =   (\(s2,stp) => bimap (,s2) (s2,) stp)
-                    <$> runStateT s1 (f v st1)
+convST :
+     {auto _ : Functor m}
+  -> (f : (v : a) -> st -> StateT s m (Step rel v st b))
+  -> (v : a)
+  -> (st,s)
+  -> m (Step rel v (st,s) (s,b))
+convST f v (st1,s1) =
+  (\(s2,stp) => bimap (,s2) (s2,) stp) <$> runStateT s1 (f v st1)
 
 public export
 MonadRec m => MonadRec (StateT s m) where
@@ -190,16 +198,19 @@ MonadRec m => MonadRec (StateT s m) where
 ---------------------------
 -- EitherT
 
-convE :  Functor m
-      => (f : (v : a) -> st -> EitherT e m (Step rel v st b))
-      -> (v : a)
-      -> (ini : st)
-      -> m (Step rel v st (Either e b))
+convE :
+     {auto _ : Functor m}
+  -> (f : (v : a) -> st -> EitherT e m (Step rel v st b))
+  -> (v : a)
+  -> (ini : st)
+  -> m (Step rel v st (Either e b))
 convE f v s1 = map conv $ runEitherT (f v s1)
-  where conv : Either e (Step rel v st b) -> Step rel v st (Either e b)
-        conv (Left err)                = Done (Left err)
-        conv (Right $ Done b)          = Done (Right b)
-        conv (Right $ Cont v2 prf st2) = Cont v2 prf st2
+
+  where
+    conv : Either e (Step rel v st b) -> Step rel v st (Either e b)
+    conv (Left err)                = Done (Left err)
+    conv (Right $ Done b)          = Done (Right b)
+    conv (Right $ Cont v2 prf st2) = Cont v2 prf st2
 
 public export
 MonadRec m => MonadRec (EitherT e m) where
@@ -209,16 +220,19 @@ MonadRec m => MonadRec (EitherT e m) where
 ---------------------------
 -- MaybeT
 
-convM :  Functor m
-      => (f : (v : a) -> st -> MaybeT m (Step rel v st b))
-      -> (v : a)
-      -> (ini : st)
-      -> m (Step rel v st (Maybe b))
+convM :
+     {auto _ : Functor m}
+  -> (f : (v : a) -> st -> MaybeT m (Step rel v st b))
+  -> (v : a)
+  -> (ini : st)
+  -> m (Step rel v st (Maybe b))
 convM f v s1 = map conv $ runMaybeT (f v s1)
-  where conv : Maybe (Step rel v st b) -> Step rel v st (Maybe b)
-        conv Nothing                  = Done Nothing
-        conv (Just $ Done b)          = Done (Just b)
-        conv (Just $ Cont v2 prf st2) = Cont v2 prf st2
+
+  where
+    conv : Maybe (Step rel v st b) -> Step rel v st (Maybe b)
+    conv Nothing                  = Done Nothing
+    conv (Just $ Done b)          = Done (Just b)
+    conv (Just $ Cont v2 prf st2) = Cont v2 prf st2
 
 public export
 MonadRec m => MonadRec (MaybeT m) where
@@ -228,11 +242,12 @@ MonadRec m => MonadRec (MaybeT m) where
 ---------------------------
 -- ReaderT
 
-convR :  (f : (v : a) -> st -> ReaderT e m (Step rel v st b))
-      -> (env : e)
-      -> (v : a)
-      -> (ini : st)
-      -> m (Step rel v st b)
+convR :
+     (f : (v : a) -> st -> ReaderT e m (Step rel v st b))
+  -> (env : e)
+  -> (v : a)
+  -> (ini : st)
+  -> m (Step rel v st b)
 convR f env v s1 = runReaderT env (f v s1)
 
 public export
@@ -243,13 +258,14 @@ MonadRec m => MonadRec (ReaderT e m) where
 ---------------------------
 -- WriterT
 
-convW :  Functor m
-      => (f : (v : a) -> st -> WriterT w m (Step rel v st b))
-      -> (v : a)
-      -> (st,w)
-      -> m (Step rel v (st,w) (b,w))
-convW f v (s1,w1) =   (\(stp,w2) => bimap (,w2) (,w2) stp)
-                  <$> unWriterT (f v s1) w1
+convW :
+     {auto _ : Functor m}
+  -> (f : (v : a) -> st -> WriterT w m (Step rel v st b))
+  -> (v : a)
+  -> (st,w)
+  -> m (Step rel v (st,w) (b,w))
+convW f v (s1,w1) =
+  (\(stp,w2) => bimap (,w2) (,w2) stp) <$> unWriterT (f v s1) w1
 
 public export
 MonadRec m => MonadRec (WriterT w m) where
@@ -259,14 +275,15 @@ MonadRec m => MonadRec (WriterT w m) where
 ---------------------------
 -- RWST
 
-convRWS :  Functor m
-        => (f : (v : a) -> st -> RWST r w s m (Step rel v st b))
-        -> (env : r)
-        -> (v : a)
-        -> (st,s,w)
-        -> m (Step rel v (st,s,w) (b,s,w))
-convRWS f env v (st1,s1,w1) =   (\(stp,s2,w2) => bimap (,s2,w2) (,s2,w2) stp)
-                            <$> unRWST (f v st1) env s1 w1
+convRWS :
+     {auto _ : Functor m}
+  -> (f : (v : a) -> st -> RWST r w s m (Step rel v st b))
+  -> (env : r)
+  -> (v : a)
+  -> (st,s,w)
+  -> m (Step rel v (st,s,w) (b,s,w))
+convRWS f env v (st1,s1,w1) =
+  (\(stp,s2,w2) => bimap (,s2,w2) (,s2,w2) stp) <$> unRWST (f v st1) env s1 w1
 
 public export
 MonadRec m => MonadRec (RWST r w s m) where

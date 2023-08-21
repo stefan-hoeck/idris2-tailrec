@@ -14,28 +14,31 @@ refl = reflexive {x = k}
 
 public export
 interface Iterable container element | container where
-  iterM :  MonadRec m
-        => (accum : element -> st -> m st)
-        -> (done  : st -> res)
-        -> (ini   : st)
-        -> (seed  : container)
-        -> m res
+  iterM :
+       {auto rec : MonadRec m}
+    -> (accum : element -> st -> m st)
+    -> (done  : st -> res)
+    -> (ini   : st)
+    -> (seed  : container)
+    -> m res
 
 export
-forM_ :  Iterable container element
-      => MonadRec m
-      => (run  : element -> m ())
-      -> (seed : container)
-      -> m ()
+forM_ :
+     {auto _ : Iterable container element}
+  -> {auto _ : MonadRec m}
+  -> (run  : element -> m ())
+  -> (seed : container)
+  -> m ()
 forM_ run = iterM (\e,_ => run e) (const ()) ()
 
 export
-foldM :  Iterable container element
-      => MonadRec m
-      => Monoid mo
-      => (calc : element -> m mo)
-      -> (seed : container)
-      -> m mo
+foldM :
+     {auto _ : Iterable container element}
+  -> {auto _ : MonadRec m}
+  -> {auto _ : Monoid mo}
+  -> (calc : element -> m mo)
+  -> (seed : container)
+  -> m mo
 foldM calc = iterM (\e,acc => (<+> acc) <$> calc e) id neutral
 
 --------------------------------------------------------------------------------
